@@ -1,0 +1,31 @@
+# Datos personales de la aplicación
+data/
+assets/audios/
+assets/waveforms/
+
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backups temporales
+*.bak
+*.tmp

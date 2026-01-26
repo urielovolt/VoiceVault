@@ -51,21 +51,43 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 class Colors:
-    BLACK = "#000000"
-    DARK_BG = "#0A0A0A"
-    CARD_BG = "#141414"
-    SURFACE = "#1E1E1E"
-    BORDER = "#2A2A2A"
-    GOLD = "#C5A059"
-    GOLD_GLOW = "#D4B06A"
-    TEXT_PRIMARY = "#FFFFFF"
-    TEXT_SECONDARY = "#A0A0A0"
-    TEXT_MUTED = "#666666"
-    SUCCESS = "#4CAF50"
-    ERROR = "#CF6679"
-    FAVORITE = "#FF4081"
-    SHADOW = "#050505"
-    PLAYING_GLOW = "#FFD700"
+    # === Fondos - Degradado de profundidad ===
+    BLACK = "#050508"           # Negro profundo con tinte azulado
+    DARK_BG = "#0C0C10"         # Fondo oscuro principal
+    CARD_BG = "#141418"         # Fondo de tarjetas
+    SURFACE = "#1C1C22"         # Superficies elevadas
+    ELEVATED = "#242430"        # Elementos flotantes
+
+    # === Bordes y líneas ===
+    BORDER = "#2A2A35"          # Borde sutil
+    BORDER_LIGHT = "#3A3A48"    # Borde más visible
+
+    # === Dorado - Paleta principal ===
+    GOLD_DARK = "#8B7355"       # Dorado oscuro para acentos
+    GOLD = "#C9A962"            # Dorado principal (más cálido)
+    GOLD_LIGHT = "#E8D5A3"      # Dorado claro para highlights
+    GOLD_GLOW = "#D4B872"       # Resplandor dorado
+
+    # === Texto - Jerarquía clara ===
+    TEXT_PRIMARY = "#F5F5F7"    # Texto principal (blanco cálido)
+    TEXT_SECONDARY = "#9898A0"  # Texto secundario
+    TEXT_MUTED = "#5C5C66"      # Texto deshabilitado
+    TEXT_ACCENT = "#C9A962"     # Texto de acento (dorado)
+
+    # === Estados ===
+    SUCCESS = "#5DB075"         # Verde éxito (más sofisticado)
+    ERROR = "#E85D75"           # Rojo error (coral)
+    FAVORITE = "#E8587A"        # Rosa favoritos
+    WARNING = "#E8A857"         # Naranja advertencia
+
+    # === Efectos ===
+    SHADOW = "#020204"          # Sombra profunda
+    PLAYING_GLOW = "#E8C55A"    # Resplandor reproduciendo
+    OVERLAY = "#0A0A0F80"       # Overlay semi-transparente
+
+    # === Gradientes simulados (para efectos) ===
+    GRADIENT_START = "#141418"
+    GRADIENT_END = "#1C1C22"
 
 CATEGORIES = ["Familiares", "Amigos", "Especiales"]
 ALLOWED_AUDIO = (".mp3", ".wav", ".m4a", ".ogg", ".flac")
@@ -420,13 +442,17 @@ class VoiceVault(ctk.CTk):
 
     def create_widgets(self):
         # =================================================================
-        # HEADER
+        # HEADER - Estilo editorial refinado
         # =================================================================
         header = ctk.CTkFrame(self, fg_color=Colors.DARK_BG, corner_radius=0)
         header.pack(fill="x", padx=0, pady=0)
 
+        # Línea decorativa superior dorada (más sutil)
+        accent_line = ctk.CTkFrame(header, fg_color=Colors.GOLD, height=1, corner_radius=0)
+        accent_line.pack(fill="x")
+
         header_content = ctk.CTkFrame(header, fg_color="transparent")
-        header_content.pack(fill="x", padx=30, pady=20)
+        header_content.pack(fill="x", padx=30, pady=16)
 
         # Logo y título
         title_frame = ctk.CTkFrame(header_content, fg_color="transparent")
@@ -437,7 +463,7 @@ class VoiceVault(ctk.CTk):
             try:
                 logo_img = Image.open(LOGO_FILE)
                 aspect_ratio = logo_img.width / logo_img.height
-                new_height = 50
+                new_height = 45
                 new_width = int(new_height * aspect_ratio)
 
                 logo_ctk = ctk.CTkImage(light_image=logo_img, dark_image=logo_img, size=(new_width, new_height))
@@ -447,72 +473,88 @@ class VoiceVault(ctk.CTk):
                 logo_label.pack(side="top", anchor="w")
             except Exception as e:
                 print(f"Error loading logo: {e}")
-                ctk.CTkLabel(title_frame, text="VoiceVault", font=("Roboto", 24, "bold"), text_color=Colors.TEXT_PRIMARY).pack(side="top", anchor="w")
+                ctk.CTkLabel(title_frame, text="VoiceVault", font=("Georgia", 22, "bold"), text_color=Colors.TEXT_PRIMARY).pack(side="top", anchor="w")
         else:
             ctk.CTkLabel(
                 title_frame,
                 text="VoiceVault",
-                font=("Roboto", 24, "bold"),
+                font=("Georgia", 22, "bold"),
                 text_color=Colors.TEXT_PRIMARY
             ).pack(side="top", anchor="w")
 
-        # Subtítulo con contador de recuerdos
+        # Contenedor para subtítulo y contador
+        meta_frame = ctk.CTkFrame(title_frame, fg_color="transparent")
+        meta_frame.pack(side="top", anchor="w", pady=(4, 0))
+
         self.subtitle_label = ctk.CTkLabel(
-            title_frame,
-            text="By @urielovolt",
-            font=("Roboto", 10),
+            meta_frame,
+            text="by @urielovolt",
+            font=("Segoe UI", 10),
             text_color=Colors.GOLD
         )
-        self.subtitle_label.pack(side="top", anchor="w", pady=(2, 0))
+        self.subtitle_label.pack(side="left")
 
-        # Contador de recuerdos
+        ctk.CTkLabel(
+            meta_frame,
+            text=" • ",
+            font=("Segoe UI", 10),
+            text_color=Colors.TEXT_MUTED
+        ).pack(side="left")
+
         self.counter_label = ctk.CTkLabel(
-            title_frame,
+            meta_frame,
             text="0 recuerdos",
-            font=("Roboto", 11),
+            font=("Segoe UI", 10),
             text_color=Colors.TEXT_SECONDARY
         )
-        self.counter_label.pack(side="top", anchor="w")
+        self.counter_label.pack(side="left")
 
         # Buscador y controles
         right_frame = ctk.CTkFrame(header_content, fg_color="transparent")
         right_frame.pack(side="right")
 
-        # Botones de Import/Export con tooltips
+        # Botones de Import/Export
         export_btn = ctk.CTkButton(
             right_frame,
             text="📤",
-            width=40,
-            height=35,
+            width=36,
+            height=36,
             fg_color=Colors.CARD_BG,
             hover_color=Colors.SURFACE,
-            font=("Segoe UI Symbol", 16),
+            font=("Segoe UI Symbol", 14),
+            corner_radius=8,
             command=self.export_backup
         )
-        export_btn.pack(side="right", padx=(5, 0))
+        export_btn.pack(side="right", padx=(4, 0))
         ToolTip(export_btn, "Exportar backup")
 
         import_btn = ctk.CTkButton(
             right_frame,
             text="📥",
-            width=40,
-            height=35,
+            width=36,
+            height=36,
             fg_color=Colors.CARD_BG,
             hover_color=Colors.SURFACE,
-            font=("Segoe UI Symbol", 16),
+            font=("Segoe UI Symbol", 14),
+            corner_radius=8,
             command=self.import_backup
         )
-        import_btn.pack(side="right", padx=(5, 0))
+        import_btn.pack(side="right", padx=(4, 0))
         ToolTip(import_btn, "Importar backup")
 
+        # Buscador compacto
         self.search_entry = ctk.CTkEntry(
             right_frame,
-            placeholder_text="Buscar nombre, nota, fecha...",
-            width=260,
-            height=40,
+            placeholder_text="🔍 Buscar...",
+            width=230,
+            height=36,
             fg_color=Colors.CARD_BG,
             border_color=Colors.BORDER,
-            text_color=Colors.TEXT_PRIMARY
+            border_width=1,
+            corner_radius=8,
+            text_color=Colors.TEXT_PRIMARY,
+            placeholder_text_color=Colors.TEXT_MUTED,
+            font=("Segoe UI", 12)
         )
         self.search_entry.pack(side="right", padx=(0, 10))
         self.search_entry.bind("<KeyRelease>", self.on_search)
@@ -521,29 +563,29 @@ class VoiceVault(ctk.CTk):
         if AUDIO_AVAILABLE and CAPTURE_ICON.exists():
             try:
                 cap_img = Image.open(CAPTURE_ICON)
-                cap_icon = ctk.CTkImage(light_image=cap_img, dark_image=cap_img, size=(28, 28))
+                cap_icon = ctk.CTkImage(light_image=cap_img, dark_image=cap_img, size=(22, 22))
 
                 self.rec_btn_header = ctk.CTkButton(
                     right_frame,
                     text="",
                     image=cap_icon,
-                    width=40,
-                    height=40,
-                    fg_color="#FFFFFF",
-                    hover_color="#E0E0E0",
-                    border_color=Colors.GOLD,
-                    border_width=1,
+                    width=36,
+                    height=36,
+                    fg_color=Colors.GOLD,
+                    hover_color=Colors.GOLD_LIGHT,
+                    corner_radius=18,
                     command=self.show_recording_dialog
                 )
                 self.rec_btn_header.pack(side="right", padx=(0, 10))
+                ToolTip(self.rec_btn_header, "Capturar recuerdo")
             except Exception as e:
                 print(f"Error loading capture icon: {e}")
 
         # =================================================================
-        # FILTERS & SORT
+        # FILTERS & SORT - Compacto
         # =================================================================
-        filters_frame = ctk.CTkFrame(self, fg_color=Colors.BLACK, corner_radius=0)
-        filters_frame.pack(fill="x", padx=30, pady=(0, 10))
+        filters_section = ctk.CTkFrame(self, fg_color=Colors.BLACK, corner_radius=0)
+        filters_section.pack(fill="x", padx=30, pady=(0, 8))
 
         # Filtros de categoría
         self.filter_buttons = {}
@@ -558,60 +600,65 @@ class VoiceVault(ctk.CTk):
                    icon_path = CATEGORIES_DIR / f"{filename}.png"
                    if icon_path.exists():
                        pil_img = Image.open(icon_path)
-                       icon = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(20, 20))
+                       icon = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(16, 16))
             except Exception:
                 pass
 
+            is_active = category == "Todos"
             btn = ctk.CTkButton(
-                filters_frame,
+                filters_section,
                 text=category,
                 image=icon,
                 compound="left",
-                width=120,
+                width=100 if icon else 80,
                 height=32,
-                fg_color=Colors.CARD_BG if category == "Todos" else "transparent",
-                hover_color=Colors.SURFACE,
-                border_color=Colors.GOLD if category == "Todos" else Colors.BORDER,
+                fg_color=Colors.GOLD if is_active else Colors.CARD_BG,
+                hover_color=Colors.GOLD_GLOW if is_active else Colors.SURFACE,
                 border_width=1,
-                text_color=Colors.GOLD if category == "Todos" else Colors.TEXT_SECONDARY,
+                border_color=Colors.GOLD if is_active else Colors.BORDER,
+                corner_radius=8,
+                text_color=Colors.BLACK if is_active else Colors.TEXT_SECONDARY,
+                font=("Segoe UI", 11),
                 command=lambda c=category: self.on_filter_click(c)
             )
-            btn.pack(side="left", padx=5)
+            btn.pack(side="left", padx=(0, 6))
             self.filter_buttons[category] = btn
 
-        # Ordenamiento (a la derecha)
-        sort_frame = ctk.CTkFrame(filters_frame, fg_color="transparent")
-        sort_frame.pack(side="right")
-
-        ctk.CTkLabel(sort_frame, text="Ordenar:", text_color=Colors.TEXT_MUTED, font=("Roboto", 11)).pack(side="left", padx=(0, 5))
-
+        # Ordenamiento y Playlist (a la derecha)
         self.sort_menu = ctk.CTkOptionMenu(
-            sort_frame,
+            filters_section,
             values=list(SORT_OPTIONS.keys()),
             variable=ctk.StringVar(value=self.current_sort),
             fg_color=Colors.CARD_BG,
             button_color=Colors.SURFACE,
             button_hover_color=Colors.GOLD,
-            width=130,
-            height=28,
+            dropdown_fg_color=Colors.CARD_BG,
+            dropdown_hover_color=Colors.SURFACE,
+            dropdown_text_color=Colors.TEXT_PRIMARY,
+            width=135,
+            height=32,
+            corner_radius=8,
+            font=("Segoe UI", 11),
             command=self.on_sort_change
         )
-        self.sort_menu.pack(side="left")
+        self.sort_menu.pack(side="right")
 
         # Botón Playlist
         self.playlist_btn = ctk.CTkButton(
-            sort_frame,
+            filters_section,
             text="▶ Playlist",
             width=90,
-            height=28,
+            height=32,
             fg_color=Colors.CARD_BG,
             hover_color=Colors.GOLD,
             text_color=Colors.TEXT_SECONDARY,
-            border_color=Colors.BORDER,
             border_width=1,
+            border_color=Colors.BORDER,
+            corner_radius=8,
+            font=("Segoe UI", 11),
             command=self.toggle_playlist_mode
         )
-        self.playlist_btn.pack(side="left", padx=(10, 0))
+        self.playlist_btn.pack(side="right", padx=(0, 8))
 
         # =================================================================
         # GRID SCROLLABLE
@@ -619,9 +666,11 @@ class VoiceVault(ctk.CTk):
         self.grid_frame = ctk.CTkScrollableFrame(
             self,
             fg_color=Colors.BLACK,
-            corner_radius=0
+            corner_radius=0,
+            scrollbar_button_color=Colors.SURFACE,
+            scrollbar_button_hover_color=Colors.GOLD
         )
-        self.grid_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        self.grid_frame.pack(fill="both", expand=True, padx=20, pady=(0, 5))
 
         # =================================================================
         # FAB (Add Button)
@@ -630,31 +679,32 @@ class VoiceVault(ctk.CTk):
         if PLUS_ICON.exists():
             try:
                 pi = Image.open(PLUS_ICON)
-                fab_image = ctk.CTkImage(light_image=pi, dark_image=pi, size=(75, 75))
+                fab_image = ctk.CTkImage(light_image=pi, dark_image=pi, size=(60, 60))
             except: pass
 
         self.fab = ctk.CTkButton(
             self,
             text="",
             image=fab_image if fab_image else None,
-            width=75,
-            height=75,
+            width=60,
+            height=60,
             fg_color="transparent",
             hover_color=Colors.SURFACE,
             border_width=0,
-            corner_radius=38,
+            corner_radius=30,
             command=self.show_add_dialog
         )
         if not fab_image:
             self.fab.configure(
                 text="+",
                 fg_color=Colors.GOLD,
-                hover_color="#D4B06A",
+                hover_color=Colors.GOLD_LIGHT,
                 text_color=Colors.BLACK,
+                font=("Segoe UI", 28, "bold"),
                 corner_radius=30
             )
 
-        self.fab.place(relx=0.95, rely=0.92, anchor="se")
+        self.fab.place(relx=0.96, rely=0.94, anchor="se")
 
     def update_counter(self):
         """Actualiza el contador de recuerdos."""
@@ -818,22 +868,29 @@ class VoiceVault(ctk.CTk):
 
         if not memories:
             empty_frame = ctk.CTkFrame(self.grid_frame, fg_color="transparent")
-            empty_frame.pack(pady=50, fill="both", expand=True)
+            empty_frame.pack(pady=80, fill="both", expand=True)
 
             if EMPTY_STATE_FILE.exists():
                 try:
                     img = Image.open(EMPTY_STATE_FILE)
-                    ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(300, 300))
-                    ctk.CTkLabel(empty_frame, image=ctk_img, text="").pack(pady=(0, 20))
+                    ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(280, 280))
+                    ctk.CTkLabel(empty_frame, image=ctk_img, text="").pack(pady=(0, 24))
                 except Exception as e:
                     print(f"Error loading empty state: {e}")
 
             ctk.CTkLabel(
                 empty_frame,
-                text="Tu álbum está vacío\nAgrega tu primer recuerdo sonoro",
-                font=("Roboto", 18),
-                text_color=Colors.TEXT_MUTED
+                text="Tu álbum está vacío",
+                font=("Segoe UI", 20, "bold"),
+                text_color=Colors.TEXT_PRIMARY
             ).pack()
+
+            ctk.CTkLabel(
+                empty_frame,
+                text="Agrega tu primer recuerdo sonoro",
+                font=("Segoe UI", 13),
+                text_color=Colors.TEXT_MUTED
+            ).pack(pady=(6, 0))
             return
 
         # Crear grid
@@ -849,24 +906,24 @@ class VoiceVault(ctk.CTk):
             self.grid_frame.grid_columnconfigure(col, weight=1, uniform="card")
 
     def create_card(self, memory: Dict):
-        # Frame sombra (para efecto de profundidad)
+        # Frame sombra
         shadow_frame = ctk.CTkFrame(
             self.grid_frame,
-            width=204,
-            height=254,
+            width=200,
+            height=248,
             fg_color=Colors.SHADOW,
-            corner_radius=14
+            corner_radius=12
         )
 
         # Frame contenedor principal
         card_frame = ctk.CTkFrame(
             shadow_frame,
-            width=200,
-            height=250,
+            width=196,
+            height=244,
             fg_color=Colors.CARD_BG,
             border_color=Colors.BORDER,
             border_width=1,
-            corner_radius=12
+            corner_radius=10
         )
         card_frame.place(x=0, y=0)
         card_frame.grid_propagate(False)
@@ -881,34 +938,30 @@ class VoiceVault(ctk.CTk):
         # Variables para animación
         animation_step = [0]
         animation_id = [None]
+        max_steps = 4
 
-        # Hover effects con animación Glow + Elevación
+        # Hover effects
         def animate_enter():
-            if animation_step[0] < 4:
+            if animation_step[0] < max_steps:
                 animation_step[0] += 1
-                # Glow: aumentar grosor del borde gradualmente
-                border_width = 1 + animation_step[0] * 0.5
-                # Elevación: mover la tarjeta hacia arriba
-                offset_y = -animation_step[0]
+                progress = animation_step[0] / max_steps
+                border_width = 1 + int(progress * 1)
+                offset_y = int(-progress * 4)
                 card_frame.place(x=0, y=offset_y)
-                card_frame.configure(
-                    border_color=Colors.GOLD,
-                    border_width=int(border_width)
-                )
-                # Expandir sombra
-                shadow_frame.configure(fg_color="#0A0A0A" if animation_step[0] < 2 else "#111111")
+                card_frame.configure(border_color=Colors.GOLD, border_width=border_width)
                 animation_id[0] = shadow_frame.after(20, animate_enter)
 
         def animate_leave():
             if animation_step[0] > 0:
                 animation_step[0] -= 1
-                border_width = 1 + animation_step[0] * 0.5
-                offset_y = -animation_step[0]
+                progress = animation_step[0] / max_steps
+                border_width = 1 + int(progress * 1)
+                offset_y = int(-progress * 4)
                 card_frame.place(x=0, y=offset_y)
                 if animation_step[0] == 0:
                     card_frame.configure(border_color=Colors.BORDER, border_width=1)
                 else:
-                    card_frame.configure(border_width=int(border_width))
+                    card_frame.configure(border_width=border_width)
                 shadow_frame.configure(fg_color=Colors.SHADOW)
                 animation_id[0] = shadow_frame.after(20, animate_leave)
 
@@ -927,14 +980,14 @@ class VoiceVault(ctk.CTk):
         card_frame.bind("<Enter>", on_enter)
         card_frame.bind("<Leave>", on_leave)
 
-        # Container para imagen (circular)
+        # Container para imagen
         image_container = ctk.CTkFrame(
             card_frame,
-            width=200,
-            height=160,
+            width=196,
+            height=155,
             fg_color="transparent"
         )
-        image_container.pack(pady=(10, 0))
+        image_container.pack(pady=(8, 0))
         image_container.pack_propagate(False)
 
         # Foto circular
@@ -942,18 +995,27 @@ class VoiceVault(ctk.CTk):
         if photo_path:
             try:
                 img = Image.open(photo_path)
-                # Hacer circular
-                circular_img = make_circular_image(img, (140, 140))
-                photo = ctk.CTkImage(light_image=circular_img, dark_image=circular_img, size=(140, 140))
+                circular_img = make_circular_image(img, (130, 130))
+                photo = ctk.CTkImage(light_image=circular_img, dark_image=circular_img, size=(130, 130))
                 photo_label = ctk.CTkLabel(image_container, image=photo, text="")
                 photo_label.image = photo
                 photo_label.place(relx=0.5, rely=0.5, anchor="center")
             except Exception as e:
                 print(f"Error cargando imagen: {e}")
-                placeholder = ctk.CTkLabel(image_container, text="🎵", font=("Roboto", 50), text_color=Colors.TEXT_MUTED)
+                placeholder = ctk.CTkLabel(
+                    image_container,
+                    text="🎵",
+                    font=("Segoe UI Symbol", 40),
+                    text_color=Colors.TEXT_MUTED
+                )
                 placeholder.place(relx=0.5, rely=0.5, anchor="center")
         else:
-            placeholder = ctk.CTkLabel(image_container, text="🎵", font=("Roboto", 50), text_color=Colors.TEXT_MUTED)
+            placeholder = ctk.CTkLabel(
+                image_container,
+                text="🎵",
+                font=("Segoe UI Symbol", 40),
+                text_color=Colors.TEXT_MUTED
+            )
             placeholder.place(relx=0.5, rely=0.5, anchor="center")
 
         for child in image_container.winfo_children():
@@ -972,11 +1034,11 @@ class VoiceVault(ctk.CTk):
                     fg_color=Colors.GOLD,
                     text_color=Colors.BLACK,
                     corner_radius=6,
-                    font=("Roboto", 10, "bold"),
+                    font=("Segoe UI", 9, "bold"),
                     width=50,
                     height=20
                 )
-                new_badge.place(x=10, y=10)
+                new_badge.place(x=8, y=6)
         except:
             pass
 
@@ -995,20 +1057,21 @@ class VoiceVault(ctk.CTk):
                     fg_color=Colors.BLACK,
                     text_color=Colors.TEXT_PRIMARY,
                     corner_radius=6,
-                    font=("Roboto", 10, "bold"),
+                    font=("Segoe UI", 9, "bold"),
                     width=40,
                     height=20
                 )
-                duration_badge.place(x=10, rely=1.0, anchor="sw", y=-10)
+                duration_badge.place(x=8, rely=1.0, anchor="sw", y=-6)
 
         # Favoritos Button
         is_fav = memory.get("is_favorite", False)
-        fav_text = "❤"
+        fav_text = "❤" if is_fav else "♡"
 
         def toggle_fav():
             new_state = self.dm.toggle_favorite(memory.get("id"))
             fav_btn.configure(
-                text_color=Colors.FAVORITE if new_state else Colors.TEXT_PRIMARY
+                text="❤" if new_state else "♡",
+                text_color=Colors.FAVORITE if new_state else Colors.TEXT_SECONDARY
             )
             if self.current_filter == "Favoritos" and not new_state:
                 self.refresh_grid()
@@ -1016,26 +1079,26 @@ class VoiceVault(ctk.CTk):
         fav_btn = ctk.CTkButton(
             image_container,
             text=fav_text,
-            width=32,
-            height=32,
+            width=28,
+            height=28,
             fg_color=Colors.BLACK,
-            hover_color="#333333",
-            text_color=Colors.FAVORITE if is_fav else Colors.TEXT_PRIMARY,
-            corner_radius=16,
+            hover_color=Colors.SURFACE,
+            text_color=Colors.FAVORITE if is_fav else Colors.TEXT_SECONDARY,
+            corner_radius=14,
             command=toggle_fav,
-            font=("Segoe UI Symbol", 18)
+            font=("Segoe UI", 14)
         )
-        fav_btn.place(relx=0.95, y=10, anchor="ne")
+        fav_btn.place(relx=0.95, y=6, anchor="ne")
 
         # Info container
         info_container = ctk.CTkFrame(card_frame, fg_color="transparent")
-        info_container.pack(fill="x", padx=10, pady=8)
+        info_container.pack(fill="x", padx=10, pady=(4, 8))
 
         # Nombre
         name_label = ctk.CTkLabel(
             info_container,
             text=memory.get("name", "Sin nombre")[:20],
-            font=("Roboto", 13, "bold"),
+            font=("Segoe UI", 13, "bold"),
             text_color=Colors.TEXT_PRIMARY
         )
         name_label.pack()
@@ -1045,15 +1108,19 @@ class VoiceVault(ctk.CTk):
         bottom_row.pack(pady=(4, 0))
 
         # Categoría
-        category_frame = ctk.CTkFrame(bottom_row, fg_color=Colors.SURFACE, corner_radius=6, height=22)
+        category_frame = ctk.CTkFrame(
+            bottom_row,
+            fg_color=Colors.SURFACE,
+            corner_radius=6
+        )
         category_frame.pack(side="left", padx=(0, 5))
 
         ctk.CTkLabel(
             category_frame,
             text=memory.get("category", ""),
-            font=("Roboto", 9),
+            font=("Segoe UI", 10),
             text_color=Colors.GOLD
-        ).pack(padx=8, pady=4)
+        ).pack(padx=8, pady=3)
 
         # Botón play
         if memory.get("audio"):
@@ -1064,11 +1131,11 @@ class VoiceVault(ctk.CTk):
             play_btn_small = ctk.CTkButton(
                 bottom_row,
                 text="▶",
-                width=45,
-                height=26,
+                width=42,
+                height=24,
                 corner_radius=6,
                 fg_color=Colors.GOLD,
-                hover_color="#D4B06A",
+                hover_color=Colors.GOLD_LIGHT,
                 text_color=Colors.BLACK,
                 font=("Arial", 14, "bold"),
                 command=play_and_open
@@ -1253,9 +1320,19 @@ class VoiceVault(ctk.CTk):
 
         for cat, btn in self.filter_buttons.items():
             if cat == category:
-                btn.configure(fg_color=Colors.CARD_BG, text_color=Colors.GOLD, border_color=Colors.GOLD)
+                btn.configure(
+                    fg_color=Colors.GOLD,
+                    text_color=Colors.BLACK,
+                    border_color=Colors.GOLD,
+                    hover_color=Colors.GOLD_GLOW
+                )
             else:
-                btn.configure(fg_color="transparent", text_color=Colors.TEXT_SECONDARY, border_color=Colors.BORDER)
+                btn.configure(
+                    fg_color=Colors.CARD_BG,
+                    text_color=Colors.TEXT_SECONDARY,
+                    border_color=Colors.BORDER,
+                    hover_color=Colors.SURFACE
+                )
 
         self.refresh_grid()
 

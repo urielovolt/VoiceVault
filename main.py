@@ -1688,8 +1688,37 @@ class VoiceVault(ctk.CTk):
 
         audio_path = self.get_audio_path(memory)
         if audio_path:
-            player_frame = ctk.CTkFrame(content, fg_color=Colors.SURFACE, corner_radius=12)
+            player_frame = ctk.CTkFrame(
+                content,
+                fg_color=Colors.SURFACE,
+                corner_radius=12,
+                border_width=1,
+                border_color=Colors.BORDER
+            )
             player_frame.pack(fill="x", pady=10)
+
+            # Header del reproductor
+            player_header = ctk.CTkFrame(player_frame, fg_color=Colors.CARD_BG, corner_radius=8)
+            player_header.pack(fill="x", padx=15, pady=(15, 10))
+
+            memory_name = memory.get("name", "Sin nombre")
+            display_name = memory_name[:35] + "..." if len(memory_name) > 35 else memory_name
+
+            ctk.CTkLabel(
+                player_header,
+                text=f"🎵 {display_name}",
+                font=("Roboto", 14, "bold"),
+                text_color=Colors.TEXT_PRIMARY
+            ).pack(side="left", padx=10, pady=8)
+
+            status_var = ctk.StringVar(value="⏹ Detenido")
+            status_label = ctk.CTkLabel(
+                player_header,
+                textvariable=status_var,
+                font=("Roboto", 11),
+                text_color=Colors.TEXT_MUTED
+            )
+            status_label.pack(side="right", padx=10, pady=8)
 
             waveform_img = None
             if AUDIO_AVAILABLE:
@@ -1720,14 +1749,48 @@ class VoiceVault(ctk.CTk):
 
             play_var = ctk.StringVar(value="▶")
             time_var = ctk.StringVar(value="0:00")
+            total_time_var = ctk.StringVar(value="0:00")
             volume_var = ctk.DoubleVar(value=0.7)
             song_length = [0]
             start_time = [0]
             pause_time = [0]
             is_paused = [False]
             is_seeking = [False]  # Para evitar conflictos al arrastrar
+            loop_enabled = [False]
 
             pygame.mixer.music.set_volume(0.7)
+
+            # Calcular y mostrar tiempo total al cargar
+            try:
+                initial_duration = self.get_audio_duration(audio_path)
+                if initial_duration > 0:
+                    song_length[0] = initial_duration
+                    mins = int(initial_duration // 60)
+                    secs = int(initial_duration % 60)
+                    total_time_var.set(f"{mins}:{secs:02d}")
+            except:
+                pass
+
+            def update_status(status):
+                """Actualiza el indicador de estado y el borde del reproductor."""
+                if status == "playing":
+                    status_var.set("▶ Reproduciendo")
+                    status_label.configure(text_color=Colors.GOLD)
+                    player_frame.configure(border_color=Colors.PLAYING_GLOW, border_width=2)
+                elif status == "paused":
+                    status_var.set("⏸ Pausado")
+                    status_label.configure(text_color=Colors.TEXT_SECONDARY)
+                    player_frame.configure(border_color=Colors.GOLD, border_width=1)
+                else:  # stopped
+                    status_var.set("⏹ Detenido")
+                    status_label.configure(text_color=Colors.TEXT_MUTED)
+                    player_frame.configure(border_color=Colors.BORDER, border_width=1)
+
+            def format_time(seconds):
+                """Formatea segundos a mm:ss."""
+                mins = int(seconds // 60)
+                secs = int(seconds % 60)
+                return f"{mins}:{secs:02d}"
 
             def update_time():
                 if self.playing and pygame.mixer.music.get_busy() and not is_paused[0]:
@@ -1735,9 +1798,7 @@ class VoiceVault(ctk.CTk):
                         import time
                         elapsed = time.time() - start_time[0] + pause_time[0]
 
-                        mins = int(elapsed // 60)
-                        secs = int(elapsed % 60)
-                        time_var.set(f"{mins}:{secs:02d}")
+                        time_var.set(format_time(elapsed))
 
                         # Solo actualizar slider si no está siendo arrastrado
                         if not is_seeking[0]:
@@ -1750,6 +1811,21 @@ class VoiceVault(ctk.CTk):
                     except Exception as e:
                         print(f"Error update_time: {e}")
                 elif self.playing and not is_paused[0]:
+                    # Audio terminó
+                    if loop_enabled[0] and song_length[0] > 0:
+                        # Repetir el audio
+                        import time as time_mod
+                        try:
+                            pygame.mixer.music.load(audio_path)
+                            pygame.mixer.music.play()
+                            start_time[0] = time_mod.time()
+                            pause_time[0] = 0
+                            self.playing = True
+                            update_time()
+                            return
+                        except:
+                            pass
+
                     self.playing = False
                     self.playing_memory_id = None
                     self.update_playing_indicator()
@@ -1758,6 +1834,7 @@ class VoiceVault(ctk.CTk):
                     progress_var.set(0)
                     start_time[0] = 0
                     pause_time[0] = 0
+                    update_status("stopped")
 
             def toggle_play():
                 import time as time_module
@@ -1777,6 +1854,7 @@ class VoiceVault(ctk.CTk):
                     is_paused[0] = True
                     pause_time[0] += time_module.time() - start_time[0]
                     play_var.set("▶")
+                    update_status("paused")
                 else:
                     try:
                         if is_paused[0]:
@@ -1786,6 +1864,7 @@ class VoiceVault(ctk.CTk):
                             self.playing = True
                             self.playing_memory_id = memory.get("id")
                             self.update_playing_indicator()
+                            update_status("playing")
                             update_time()
                         else:
                             if pygame.mixer.music.get_busy():
@@ -1793,6 +1872,9 @@ class VoiceVault(ctk.CTk):
 
                             # Detectar duración del audio
                             song_length[0] = self.get_audio_duration(audio_path)
+
+                            # Mostrar tiempo total
+                            total_time_var.set(format_time(song_length[0]))
 
                             pygame.mixer.music.load(audio_path)
                             pygame.mixer.music.play()
@@ -1803,6 +1885,7 @@ class VoiceVault(ctk.CTk):
                             self.playing = True
                             self.playing_memory_id = memory.get("id")
                             self.update_playing_indicator()
+                            update_status("playing")
 
                             update_time()
 
@@ -1826,6 +1909,67 @@ class VoiceVault(ctk.CTk):
                 play_var.set("▶")
                 time_var.set("0:00")
                 progress_var.set(0)
+                update_status("stopped")
+
+            def skip_backward():
+                """Retrocede 10 segundos en la reproducción."""
+                import time as time_mod
+                if song_length[0] > 0 and (self.playing or is_paused[0]):
+                    current_pos = time_mod.time() - start_time[0] + pause_time[0] if self.playing else pause_time[0]
+                    new_pos = max(0, current_pos - 10)
+                    try:
+                        pygame.mixer.music.stop()
+                        pygame.mixer.music.load(audio_path)
+                        pygame.mixer.music.play(start=new_pos)
+
+                        start_time[0] = time_mod.time()
+                        pause_time[0] = new_pos
+                        is_paused[0] = False
+                        self.playing = True
+                        self.playing_memory_id = memory.get("id")
+                        self.update_playing_indicator()
+                        play_var.set("⏸")
+                        update_status("playing")
+                        update_time()
+                    except Exception as e:
+                        print(f"Error skip backward: {e}")
+
+            def skip_forward():
+                """Adelanta 10 segundos en la reproducción."""
+                import time as time_mod
+                if song_length[0] > 0 and (self.playing or is_paused[0]):
+                    current_pos = time_mod.time() - start_time[0] + pause_time[0] if self.playing else pause_time[0]
+                    new_pos = min(song_length[0] - 1, current_pos + 10)
+
+                    if new_pos >= song_length[0] - 1:
+                        # Si llegamos al final, detener
+                        stop()
+                        return
+
+                    try:
+                        pygame.mixer.music.stop()
+                        pygame.mixer.music.load(audio_path)
+                        pygame.mixer.music.play(start=new_pos)
+
+                        start_time[0] = time_mod.time()
+                        pause_time[0] = new_pos
+                        is_paused[0] = False
+                        self.playing = True
+                        self.playing_memory_id = memory.get("id")
+                        self.update_playing_indicator()
+                        play_var.set("⏸")
+                        update_status("playing")
+                        update_time()
+                    except Exception as e:
+                        print(f"Error skip forward: {e}")
+
+            def toggle_loop():
+                """Activa/desactiva la repetición del audio."""
+                loop_enabled[0] = not loop_enabled[0]
+                if loop_enabled[0]:
+                    loop_btn.configure(fg_color=Colors.GOLD, text_color=Colors.BLACK)
+                else:
+                    loop_btn.configure(fg_color=Colors.CARD_BG, text_color=Colors.TEXT_SECONDARY)
 
             def on_volume(val):
                 pygame.mixer.music.set_volume(val)
@@ -1833,58 +1977,18 @@ class VoiceVault(ctk.CTk):
             controls = ctk.CTkFrame(player_frame, fg_color="transparent")
             controls.pack(padx=20, pady=20, fill="both")
 
-            row1 = ctk.CTkFrame(controls, fg_color="transparent")
-            row1.pack(fill="x", pady=(0, 10))
+            # Barra de progreso con tiempo actual/total
+            progress_row = ctk.CTkFrame(controls, fg_color="transparent")
+            progress_row.pack(fill="x", pady=(0, 15))
 
-            btn_container = ctk.CTkFrame(row1, fg_color="transparent")
-            btn_container.pack(side="left")
-
-            ctk.CTkButton(
-                btn_container,
-                textvariable=play_var,
-                width=60,
-                height=40,
-                fg_color=Colors.GOLD,
-                hover_color="#D4B06A",
-                text_color=Colors.BLACK,
-                font=("Segoe UI Symbol", 20),
-                command=toggle_play
-            ).pack(side="left", padx=(0, 8))
-
-            ctk.CTkButton(
-                btn_container,
-                text="⏹",
-                width=50,
-                height=40,
-                fg_color=Colors.CARD_BG,
-                hover_color=Colors.BORDER,
-                text_color=Colors.TEXT_PRIMARY,
-                font=("Arial", 18, "bold"),
-                command=stop
-            ).pack(side="left")
-
-            vol_container = ctk.CTkFrame(row1, fg_color="transparent")
-            vol_container.pack(side="left", padx=20, fill="x", expand=True)
-
-            ctk.CTkLabel(vol_container, text="🔊", font=("Roboto", 14)).pack(side="left", padx=(0, 8))
-            ctk.CTkSlider(
-                vol_container,
-                from_=0,
-                to=1,
-                variable=volume_var,
-                button_color=Colors.GOLD,
-                progress_color=Colors.GOLD,
-                fg_color=Colors.BORDER,
-                command=on_volume,
-                width=150
-            ).pack(side="left")
-
+            # Tiempo actual (izquierda)
             ctk.CTkLabel(
-                row1,
+                progress_row,
                 textvariable=time_var,
-                font=("Roboto", 13),
-                text_color=Colors.TEXT_SECONDARY
-            ).pack(side="right")
+                font=("Roboto", 12),
+                text_color=Colors.TEXT_SECONDARY,
+                width=45
+            ).pack(side="left")
 
             # Barra de progreso interactiva (seekable)
             progress_var = ctk.DoubleVar(value=0)
@@ -1904,7 +2008,6 @@ class VoiceVault(ctk.CTk):
                     # Calcular nueva posición en segundos
                     new_pos = value * song_length[0]
                     try:
-                        # Pygame no tiene seek directo, hay que recargar y posicionar
                         pygame.mixer.music.stop()
                         pygame.mixer.music.load(audio_path)
                         pygame.mixer.music.play(start=new_pos)
@@ -1916,12 +2019,13 @@ class VoiceVault(ctk.CTk):
                         self.playing_memory_id = memory.get("id")
                         self.update_playing_indicator()
                         play_var.set("⏸")
+                        update_status("playing")
                         update_time()
                     except Exception as e:
                         print(f"Error seeking: {e}")
 
             progress_slider = ctk.CTkSlider(
-                controls,
+                progress_row,
                 from_=0,
                 to=1,
                 variable=progress_var,
@@ -1932,8 +2036,111 @@ class VoiceVault(ctk.CTk):
                 height=14,
                 command=on_seek
             )
-            progress_slider.pack(fill="x")
+            progress_slider.pack(side="left", fill="x", expand=True, padx=10)
             progress_slider.set(0)
+
+            # Tiempo total (derecha)
+            ctk.CTkLabel(
+                progress_row,
+                textvariable=total_time_var,
+                font=("Roboto", 12),
+                text_color=Colors.TEXT_SECONDARY,
+                width=45
+            ).pack(side="right")
+
+            # Separador
+            ctk.CTkFrame(controls, fg_color=Colors.BORDER, height=1).pack(fill="x", pady=(0, 15))
+
+            # Fila de controles principales
+            row1 = ctk.CTkFrame(controls, fg_color="transparent")
+            row1.pack(fill="x")
+
+            # Contenedor de botones de reproducción (izquierda)
+            btn_container = ctk.CTkFrame(row1, fg_color="transparent")
+            btn_container.pack(side="left")
+
+            # Botón retroceder 10s
+            ctk.CTkButton(
+                btn_container,
+                text="⏪",
+                width=45,
+                height=40,
+                fg_color=Colors.CARD_BG,
+                hover_color=Colors.BORDER,
+                text_color=Colors.TEXT_PRIMARY,
+                font=("Segoe UI Symbol", 16),
+                command=skip_backward
+            ).pack(side="left", padx=(0, 5))
+
+            # Botón Play/Pause
+            ctk.CTkButton(
+                btn_container,
+                textvariable=play_var,
+                width=60,
+                height=40,
+                fg_color=Colors.GOLD,
+                hover_color="#D4B06A",
+                text_color=Colors.BLACK,
+                font=("Segoe UI Symbol", 20),
+                command=toggle_play
+            ).pack(side="left", padx=5)
+
+            # Botón adelantar 10s
+            ctk.CTkButton(
+                btn_container,
+                text="⏩",
+                width=45,
+                height=40,
+                fg_color=Colors.CARD_BG,
+                hover_color=Colors.BORDER,
+                text_color=Colors.TEXT_PRIMARY,
+                font=("Segoe UI Symbol", 16),
+                command=skip_forward
+            ).pack(side="left", padx=5)
+
+            # Botón Stop
+            ctk.CTkButton(
+                btn_container,
+                text="⏹",
+                width=45,
+                height=40,
+                fg_color=Colors.CARD_BG,
+                hover_color=Colors.BORDER,
+                text_color=Colors.TEXT_PRIMARY,
+                font=("Arial", 16, "bold"),
+                command=stop
+            ).pack(side="left", padx=(5, 15))
+
+            # Botón Loop
+            loop_btn = ctk.CTkButton(
+                btn_container,
+                text="🔁",
+                width=45,
+                height=40,
+                fg_color=Colors.CARD_BG,
+                hover_color=Colors.BORDER,
+                text_color=Colors.TEXT_SECONDARY,
+                font=("Segoe UI Symbol", 16),
+                command=toggle_loop
+            )
+            loop_btn.pack(side="left")
+
+            # Control de volumen (derecha)
+            vol_container = ctk.CTkFrame(row1, fg_color="transparent")
+            vol_container.pack(side="right")
+
+            ctk.CTkLabel(vol_container, text="🔊", font=("Roboto", 14)).pack(side="left", padx=(0, 8))
+            ctk.CTkSlider(
+                vol_container,
+                from_=0,
+                to=1,
+                variable=volume_var,
+                button_color=Colors.GOLD,
+                progress_color=Colors.GOLD,
+                fg_color=Colors.BORDER,
+                command=on_volume,
+                width=120
+            ).pack(side="left")
 
         buttons = ctk.CTkFrame(content, fg_color="transparent")
         buttons.pack(fill="x", pady=(20, 0))

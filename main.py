@@ -12,9 +12,10 @@ import shutil
 import uuid
 import os
 import zipfile
+import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 from PIL import Image, ImageTk, ImageDraw, ImageChops
 import pygame
 
@@ -38,13 +39,35 @@ CAPTURE_ICON = ASSETS_DIR / "CapturaRecuerdos.png"
 PLUS_ICON = ASSETS_DIR / "plus_icon.png"
 WAVEFORMS_DIR = ASSETS_DIR / "waveforms"
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(APP_DIR / "voicevault.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("VoiceVault")
+
 # Import Audio Utils
 try:
     from audio_utils import AudioRecorder, generate_waveform
     AUDIO_AVAILABLE = True
 except ImportError:
     AUDIO_AVAILABLE = False
-    print("Audio libraries not installed (sounddevice, soundfile, numpy)")
+    logger.warning("Audio libraries not installed (sounddevice, soundfile, numpy)")
+
+# Import Audio Converter
+try:
+    import audio_converter
+    CONVERTER_AVAILABLE = True
+    converter_caps = audio_converter.get_conversion_capabilities()
+    if not converter_caps["can_convert"]:
+        logger.warning("Audio converter available but ffmpeg not found - conversion disabled")
+except ImportError:
+    CONVERTER_AVAILABLE = False
+    logger.warning("Audio converter module not available")
 
 # Configurar tema
 ctk.set_appearance_mode("dark")
@@ -90,7 +113,7 @@ class Colors:
     GRADIENT_END = "#1C1C22"
 
 CATEGORIES = ["Familiares", "Amigos", "Especiales"]
-ALLOWED_AUDIO = (".mp3", ".wav", ".m4a", ".ogg", ".flac")
+ALLOWED_AUDIO = (".mp3", ".wav", ".ogg", ".flac")
 ALLOWED_IMAGE = (".jpg", ".jpeg", ".png", ".webp", ".gif")
 
 # Opciones de ordenamiento
@@ -198,26 +221,86 @@ class DataManager:
                 return m["is_favorite"]
         return False
 
-    def copy_to_assets(self, source_path: str, file_type: str) -> Optional[str]:
+    def copy_to_assets(self, source_path: str, file_type: str) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Copia archivo a assets con validación de contenido y conversión automática.
+        
+        Returns:
+            (filename, error_message): filename si éxito, error_message si falla
+        """
         source = Path(source_path)
         if not source.exists():
-            return None
+            logger.error(f"Source file not found: {source_path}")
+            return None, "Archivo no encontrado"
 
         ext = source.suffix.lower()
         allowed = ALLOWED_IMAGE if file_type == "photo" else ALLOWED_AUDIO
+        conversion_attempted = False
+        
+        # Validación inicial de extensión
         if ext not in allowed:
-            return None
-
+            logger.warning(f"Extension {ext} not in allowed list for {file_type}")
+            
+            # Si es audio, intentar conversión automática
+            if file_type == "audio" and CONVERTER_AVAILABLE:
+                logger.info(f"Attempting automatic conversion for {source.name}")
+                conversion_attempted = True
+                
+                # Intentar conversión a WAV (formato universal)
+                converted_path = audio_converter.convert_to_supported_format(
+                    source, 
+                    target_format="wav"
+                )
+                
+                if converted_path:
+                    logger.info(f"Conversion successful: {source.name} -> {converted_path.name}")
+                    source = converted_path
+                    ext = source.suffix.lower()
+                else:
+                    logger.error(f"Conversion failed for {source.name}")
+                    
+                    # Verificar si ffmpeg está disponible
+                    caps = audio_converter.get_conversion_capabilities()
+                    if not caps["ffmpeg_available"]:
+                        error_msg = "FFmpeg no está instalado. Se requiere para convertir este formato."
+                    else:
+                        error_msg = "No se pudo convertir el archivo de audio. Formato no soportado."
+                    
+                    return None, error_msg
+            else:
+                if file_type == "audio":
+                    error_msg = f"Formato de audio no soportado: {ext}. Formatos permitidos: {', '.join(ALLOWED_AUDIO)}"
+                else:
+                    error_msg = f"Formato de imagen no soportado: {ext}"
+                return None, error_msg
+        
+        # Validación de contenido real para audio (seguridad)
+        if file_type == "audio" and CONVERTER_AVAILABLE:
+            if not audio_converter.is_format_supported(source):
+                logger.error(f"Audio file {source.name} failed content validation")
+                return None, "El archivo no contiene audio válido o está corrupto"
+        
+        # Copiar archivo validado
         new_name = f"{uuid.uuid4()}{ext}"
         dest_dir = PHOTOS_DIR if file_type == "photo" else AUDIOS_DIR
         dest_path = dest_dir / new_name
 
         try:
             shutil.copy2(source, dest_path)
-            return new_name
+            logger.info(f"File copied successfully: {new_name}")
+            
+            # Si fue una conversión, eliminar archivo temporal
+            if conversion_attempted and source != Path(source_path):
+                try:
+                    source.unlink()
+                    logger.debug(f"Temporary converted file deleted: {source}")
+                except Exception as e:
+                    logger.warning(f"Could not delete temporary file: {e}")
+            
+            return new_name, None
         except Exception as e:
-            print(f"Error copiando archivo: {e}")
-            return None
+            logger.error(f"Error copying file {source.name}: {e}")
+            return None, f"Error al copiar archivo: {str(e)}"
 
     def export_backup(self, export_path: str) -> bool:
         """Exporta todos los recuerdos a un archivo ZIP."""
@@ -390,7 +473,7 @@ class VoiceVault(ctk.CTk):
         self.configure(fg_color=Colors.BLACK)
 
         self.dm = DataManager()
-        self.current_filter = "Todos"
+        self.current_filter = "Inicio"
         self.search_query = ""
         self.current_memory = None
         self.current_dialog = None
@@ -589,7 +672,7 @@ class VoiceVault(ctk.CTk):
 
         # Filtros de categoría
         self.filter_buttons = {}
-        for category in ["Todos", "Favoritos"] + CATEGORIES:
+        for category in ["Inicio", "Favoritos"] + CATEGORIES:
             icon = None
             try:
                 if category != "Todos":
@@ -604,7 +687,7 @@ class VoiceVault(ctk.CTk):
             except Exception:
                 pass
 
-            is_active = category == "Todos"
+            is_active = category == "Inicio"
             btn = ctk.CTkButton(
                 filters_section,
                 text=category,
@@ -846,6 +929,276 @@ class VoiceVault(ctk.CTk):
                 else:
                     messagebox.showerror("Error", "No se pudo importar el backup.")
 
+    # =================================================================
+    # DASHBOARD — Inicio
+    # =================================================================
+
+    def create_dashboard(self):
+        """Vista Inicio: resumen personal de la colección."""
+        from datetime import datetime
+
+        memories  = self.dm.get_all()
+        total     = len(memories)
+        favorites = sum(1 for m in memories if m.get("is_favorite", False))
+        cat_counts = {cat: sum(1 for m in memories if m.get("category") == cat)
+                      for cat in CATEGORIES}
+        max_count = max(cat_counts.values(), default=1) or 1
+
+        # Fecha más antigua para "desde X"
+        oldest_dt = None
+        dates = [m.get("created_at", "") for m in memories if m.get("created_at")]
+        if dates:
+            try:
+                oldest_dt = datetime.strptime(min(dates)[:10], "%Y-%m-%d")
+            except Exception:
+                pass
+
+        # Últimas 4 memorias
+        recent = sorted(memories, key=lambda m: m.get("created_at", ""), reverse=True)[:4]
+
+        # ── Wrapper principal ──────────────────────────────────────────
+        wrap = ctk.CTkFrame(self.grid_frame, fg_color="transparent")
+        wrap.pack(fill="both", expand=True, padx=28, pady=20)
+
+        # ── Línea de fecha (viva, cambia cada día) ─────────────────────
+        day_map   = {"Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles",
+                     "Thursday": "Jueves", "Friday": "Viernes",
+                     "Saturday": "Sábado", "Sunday": "Domingo"}
+        month_map = {"January": "enero", "February": "febrero", "March": "marzo",
+                     "April": "abril", "May": "mayo", "June": "junio",
+                     "July": "julio", "August": "agosto", "September": "septiembre",
+                     "October": "octubre", "November": "noviembre", "December": "diciembre"}
+        now        = datetime.now()
+        day_name   = day_map.get(now.strftime("%A"), now.strftime("%A"))
+        month_name = month_map.get(now.strftime("%B"), now.strftime("%B"))
+        date_str   = f"{day_name}  ·  {now.day} de {month_name}"
+
+        ctk.CTkLabel(
+            wrap, text=date_str,
+            font=("Segoe UI", 12),
+            text_color=Colors.TEXT_MUTED
+        ).pack(anchor="w", pady=(0, 16))
+
+        # ── Sección superior: 2 columnas ──────────────────────────────
+        top = ctk.CTkFrame(wrap, fg_color="transparent")
+        top.pack(fill="x", pady=(0, 24))
+        top.columnconfigure(0, weight=55)
+        top.columnconfigure(1, weight=45)
+
+        # ── LEFT: bloque de declaración ───────────────────────────────
+        left = ctk.CTkFrame(
+            top, fg_color=Colors.CARD_BG,
+            corner_radius=12, border_width=1, border_color=Colors.BORDER
+        )
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+
+        ctk.CTkLabel(
+            left, text=str(total),
+            font=("Segoe UI", 64, "bold"),
+            text_color=Colors.GOLD
+        ).pack(anchor="w", padx=28, pady=(24, 0))
+
+        ctk.CTkLabel(
+            left,
+            text="recuerdo" + ("s" if total != 1 else "") + " guardado" + ("s" if total != 1 else ""),
+            font=("Segoe UI", 13),
+            text_color=Colors.TEXT_SECONDARY
+        ).pack(anchor="w", padx=28)
+
+        ctk.CTkFrame(left, fg_color=Colors.BORDER, height=1).pack(fill="x", padx=28, pady=16)
+
+        fav_row = ctk.CTkFrame(left, fg_color="transparent")
+        fav_row.pack(anchor="w", padx=28)
+        ctk.CTkLabel(fav_row, text="⭐", font=("Segoe UI", 14)).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(
+            fav_row,
+            text=f"{favorites}  favorito" + ("s" if favorites != 1 else ""),
+            font=("Segoe UI", 13),
+            text_color=Colors.TEXT_SECONDARY
+        ).pack(side="left")
+
+        if oldest_dt:
+            abbr = month_map.get(oldest_dt.strftime("%B"), oldest_dt.strftime("%B"))[:3]
+            since_str = f"desde {abbr}. {oldest_dt.year}"
+            ctk.CTkLabel(
+                left, text=since_str,
+                font=("Segoe UI", 11),
+                text_color=Colors.TEXT_MUTED
+            ).pack(anchor="w", padx=28, pady=(10, 24))
+        else:
+            ctk.CTkFrame(left, fg_color="transparent", height=24).pack()
+
+        # ── RIGHT: distribución por categoría ─────────────────────────
+        right = ctk.CTkFrame(
+            top, fg_color=Colors.CARD_BG,
+            corner_radius=12, border_width=1, border_color=Colors.BORDER
+        )
+        right.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+
+        ctk.CTkLabel(
+            right, text="Por categoría",
+            font=("Segoe UI", 11),
+            text_color=Colors.TEXT_MUTED
+        ).pack(anchor="w", padx=22, pady=(20, 14))
+
+        for cat in CATEGORIES:
+            count = cat_counts.get(cat, 0)
+            ratio = count / max_count
+
+            cat_block = ctk.CTkFrame(right, fg_color="transparent")
+            cat_block.pack(fill="x", padx=22, pady=(0, 14))
+
+            name_row = ctk.CTkFrame(cat_block, fg_color="transparent")
+            name_row.pack(fill="x")
+            ctk.CTkLabel(
+                name_row, text=cat,
+                font=("Segoe UI", 12),
+                text_color=Colors.TEXT_PRIMARY
+            ).pack(side="left")
+            ctk.CTkLabel(
+                name_row, text=str(count),
+                font=("Segoe UI", 12, "bold"),
+                text_color=Colors.GOLD
+            ).pack(side="right")
+
+            # Barra proporcional: fondo + relleno dorado dinámico
+            bar_bg = ctk.CTkFrame(cat_block, fg_color=Colors.BORDER, height=3, corner_radius=2)
+            bar_bg.pack(fill="x", pady=(5, 0))
+            if ratio > 0:
+                bar_fill = ctk.CTkFrame(bar_bg, fg_color=Colors.GOLD, height=3, corner_radius=2)
+                bar_fill.place(relwidth=ratio, relheight=1.0, x=0, y=0)
+
+            # Click en categoría → navegar al filtro
+            def _goto(c=cat):
+                self.on_filter_click(c)
+            for w in (cat_block, name_row):
+                w.bind("<Button-1>", lambda e, c=cat: _goto(c))
+                w.configure(cursor="hand2")
+
+        ctk.CTkFrame(right, fg_color="transparent", height=6).pack()
+
+        # ── Sección recientes ─────────────────────────────────────────
+        rec_header = ctk.CTkFrame(wrap, fg_color="transparent")
+        rec_header.pack(fill="x", pady=(0, 10))
+
+        ctk.CTkLabel(
+            rec_header, text="Recientes",
+            font=("Segoe UI", 14, "bold"),
+            text_color=Colors.TEXT_PRIMARY
+        ).pack(side="left")
+
+        if total > 4:
+            ver_btn = ctk.CTkButton(
+                rec_header, text="ver todo →",
+                fg_color="transparent",
+                text_color=Colors.GOLD,
+                hover_color=Colors.SURFACE,
+                height=26, width=80,
+                font=("Segoe UI", 12),
+                command=self._dashboard_ver_todo
+            )
+            ver_btn.pack(side="right")
+
+        if recent:
+            rec_frame = ctk.CTkFrame(wrap, fg_color="transparent")
+            rec_frame.pack(fill="x")
+            for i in range(len(recent)):
+                rec_frame.columnconfigure(i, weight=1)
+            for i, mem in enumerate(recent):
+                self._create_mini_card(rec_frame, mem, col=i)
+        else:
+            ctk.CTkLabel(
+                wrap,
+                text="Aún no hay recuerdos guardados",
+                font=("Segoe UI", 12),
+                text_color=Colors.TEXT_MUTED
+            ).pack(pady=16)
+
+    def _create_mini_card(self, parent, memory: Dict, col: int):
+        """Tarjeta compacta horizontal para la sección Recientes del dashboard."""
+        shadow = ctk.CTkFrame(parent, fg_color=Colors.BORDER, corner_radius=10)
+        shadow.grid(row=0, column=col, padx=5, pady=4, sticky="ew")
+
+        card = ctk.CTkFrame(
+            shadow, fg_color=Colors.CARD_BG,
+            corner_radius=9, border_width=0
+        )
+        card.pack(fill="both", expand=True, padx=1, pady=1)
+
+        def on_enter(e):
+            card.configure(border_color=Colors.GOLD, border_width=1)
+        def on_leave(e):
+            card.configure(border_color=Colors.CARD_BG, border_width=0)
+        def on_click(e):
+            self.show_detail(memory)
+
+        for w in (card, shadow):
+            w.bind("<Enter>", on_enter)
+            w.bind("<Leave>", on_leave)
+            w.bind("<Button-1>", on_click)
+            w.configure(cursor="hand2")
+
+        # Foto circular pequeña
+        photo_frame = ctk.CTkFrame(card, fg_color="transparent", width=48, height=48)
+        photo_frame.pack(side="left", padx=(10, 6), pady=10)
+        photo_frame.pack_propagate(False)
+
+        photo_path = self.get_photo_path(memory)
+        photo_label = None
+        if photo_path:
+            try:
+                img = make_circular_image(Image.open(photo_path), (48, 48))
+                ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(48, 48))
+                photo_label = ctk.CTkLabel(photo_frame, image=ctk_img, text="")
+                photo_label.pack()
+            except Exception:
+                photo_label = None
+
+        if photo_label is None:
+            ctk.CTkLabel(photo_frame, text="🎵", font=("Segoe UI", 18)).pack(expand=True)
+
+        # Info: nombre + categoría
+        info = ctk.CTkFrame(card, fg_color="transparent")
+        info.pack(side="left", fill="both", expand=True, pady=10, padx=(0, 8))
+
+        name = memory.get("name", "Sin nombre")
+        if len(name) > 20:
+            name = name[:19] + "…"
+        name_lbl = ctk.CTkLabel(
+            info, text=name,
+            font=("Segoe UI", 12, "bold"),
+            text_color=Colors.TEXT_PRIMARY, anchor="w"
+        )
+        name_lbl.pack(anchor="w")
+
+        cat = memory.get("category", "")
+        if cat:
+            cat_lbl = ctk.CTkLabel(
+                info, text=cat,
+                font=("Segoe UI", 10),
+                text_color=Colors.TEXT_MUTED, anchor="w"
+            )
+            cat_lbl.pack(anchor="w", pady=(2, 0))
+
+        # Propagar eventos a todos los hijos
+        for w in (info, photo_frame) + tuple(info.winfo_children()) + tuple(photo_frame.winfo_children()):
+            w.bind("<Enter>", on_enter)
+            w.bind("<Leave>", on_leave)
+            w.bind("<Button-1>", on_click)
+            w.configure(cursor="hand2")
+
+    def _dashboard_ver_todo(self):
+        """'Ver todo →' del dashboard: muestra todas las memorias sin filtro de categoría."""
+        self.current_filter = "Todos"
+        for btn in self.filter_buttons.values():
+            btn.configure(
+                fg_color=Colors.CARD_BG,
+                text_color=Colors.TEXT_SECONDARY,
+                border_color=Colors.BORDER,
+                hover_color=Colors.SURFACE
+            )
+        self.refresh_grid()
+
     def refresh_grid(self):
         # Limpiar grid y referencias
         for widget in self.grid_frame.winfo_children():
@@ -854,6 +1207,11 @@ class VoiceVault(ctk.CTk):
 
         # Actualizar contador
         self.update_counter()
+
+        # Dashboard de inicio
+        if self.current_filter == "Inicio" and not self.search_query:
+            self.create_dashboard()
+            return
 
         # Obtener memorias filtradas
         if self.search_query:
@@ -1455,11 +1813,24 @@ class VoiceVault(ctk.CTk):
                 error_label.configure(text="Selecciona un archivo de audio")
                 return
 
-            photo_name = self.dm.copy_to_assets(form_data["photo"], "photo") if form_data["photo"] else None
-            audio_name = self.dm.copy_to_assets(form_data["audio"], "audio")
+            # Copiar foto si existe
+            photo_name = None
+            if form_data["photo"]:
+                photo_name, photo_error = self.dm.copy_to_assets(form_data["photo"], "photo")
+                if photo_error:
+                    error_label.configure(text=f"Error con foto: {photo_error}")
+                    logger.warning(f"Photo copy failed: {photo_error}")
+                    # Continuar sin foto
+            
+            # Copiar/convertir audio
+            audio_name, audio_error = self.dm.copy_to_assets(form_data["audio"], "audio")
+            
+            if audio_error:
+                error_label.configure(text=audio_error)
+                return
 
             if not audio_name:
-                error_label.configure(text="Error al copiar audio")
+                error_label.configure(text="Error al procesar archivo de audio")
                 return
 
             self.dm.add({

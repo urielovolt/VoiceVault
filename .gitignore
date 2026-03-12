@@ -1,7 +1,17 @@
 # Datos personales de la aplicación
 data/
 assets/audios/
+assets/photos/
 assets/waveforms/
+
+# Logs (contienen nombres de archivos personales)
+*.log
+
+# Artefactos accidentales de Windows
+nul
+
+# Configuración local de Claude
+.claude/
 
 # Python
 *.pyc
